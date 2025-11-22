@@ -1,3 +1,12 @@
+//
+// scanner.rs
+// BigDiff-rs
+//
+// Walks directory trees while honoring ignore rules, collecting relative file and folder paths for later diffing.
+//
+// Thales Matheus Mendonça Santos - November 2025
+//
+// Filesystem scanning utilities that collect relative paths while honoring ignore rules.
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -5,6 +14,7 @@ use glob::Pattern;
 use walkdir::WalkDir;
 
 #[derive(Debug)]
+/// Captures a directory traversal: absolute root plus relative files/dirs found.
 pub struct ScanResult {
     pub files: HashMap<PathBuf, PathBuf>, // rel -> abs
     pub dirs: HashSet<PathBuf>,           // rel
@@ -12,6 +22,7 @@ pub struct ScanResult {
 }
 
 fn is_ignored(rel: &Path, patterns: &[Pattern]) -> bool {
+    // Quick blocklist for common noise directories/files.
     let name = rel.file_name().and_then(|s| s.to_str()).unwrap_or("");
     if [".git", "__pycache__", ".DS_Store", "Thumbs.db"].contains(&name) {
         return true;
@@ -29,6 +40,7 @@ pub fn scan_dir(root: &Path, patterns: &[Pattern]) -> ScanResult {
     let mut files = HashMap::new();
     let mut dirs = HashSet::new();
 
+    // Walk the tree non-recursively following only real files/directories.
     let walker = WalkDir::new(root).follow_links(false).into_iter();
 
     for entry in walker.filter_entry(|e| {
@@ -37,6 +49,7 @@ pub fn scan_dir(root: &Path, patterns: &[Pattern]) -> ScanResult {
             if rel == Path::new("") {
                 return true;
             }
+            // Avoid descending into ignored paths early to keep traversal fast.
             !is_ignored(rel, patterns)
         } else {
             true

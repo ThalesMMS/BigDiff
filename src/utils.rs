@@ -1,3 +1,12 @@
+//
+// utils.rs
+// BigDiff-rs
+//
+// Shared helpers for parsing sizes, detecting binary files, reading text robustly, avoiding filename collisions, and mirroring deleted paths.
+//
+// Thales Matheus Mendonça Santos - November 2025
+//
+// Shared helpers used across CLI and diff logic.
 use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -6,6 +15,7 @@ use anyhow::Result;
 use encoding_rs::WINDOWS_1252;
 use sha2::{Digest, Sha256};
 
+/// Parses a human-friendly size string like "5MB" or "2gib" into bytes.
 pub fn parse_size(s: &str) -> u64 {
     let s = s.trim().to_lowercase();
     let units = [
@@ -31,6 +41,7 @@ pub fn parse_size(s: &str) -> u64 {
     s.parse().unwrap_or(0)
 }
 
+/// Cheap heuristic: look for null bytes or invalid UTF-8 to flag likely binary files.
 pub fn is_probably_binary(path: &Path) -> bool {
     let mut file = match File::open(path) {
         Ok(f) => f,
@@ -52,11 +63,13 @@ pub fn is_probably_binary(path: &Path) -> bool {
     std::str::from_utf8(slice).is_err()
 }
 
+/// Reads text using UTF-8 first, then Windows-1252, optionally normalizing EOLs.
 pub fn read_text_best_effort(path: &Path, normalize_eol: bool) -> Result<String> {
     let bytes = fs::read(path)?;
     let content = match String::from_utf8(bytes.clone()) {
         Ok(s) => s,
         Err(_) => {
+            // Fallback to a permissive single-byte encoding to salvage imperfect files.
             let (res, _, _) = WINDOWS_1252.decode(&bytes);
             res.into_owned()
         }
@@ -69,6 +82,7 @@ pub fn read_text_best_effort(path: &Path, normalize_eol: bool) -> Result<String>
     }
 }
 
+/// Compares two files by streaming SHA-256 hashes to avoid loading everything at once.
 pub fn file_bytes_equal(p1: &Path, p2: &Path) -> bool {
     let hash_file = |p: &Path| -> Option<String> {
         let mut file = File::open(p).ok()?;
@@ -83,6 +97,7 @@ pub fn file_bytes_equal(p1: &Path, p2: &Path) -> bool {
     }
 }
 
+/// If a path already exists, append " (n)" before the extension to avoid overwrite.
 pub fn avoid_collision(path: &Path) -> PathBuf {
     if !path.exists() {
         return path.to_path_buf();
@@ -105,6 +120,7 @@ pub fn avoid_collision(path: &Path) -> PathBuf {
     }
 }
 
+/// Adds `.deleted` after every path component to mirror removed folder hierarchies.
 pub fn rel_parts_with_deleted_suffix(rel: &Path) -> PathBuf {
     let mut new_path = PathBuf::new();
     for comp in rel.components() {

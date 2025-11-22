@@ -1,3 +1,12 @@
+//
+// main.rs
+// BigDiff-rs
+//
+// Runs the BigDiff CLI: validates input/output directories, supports dry runs, and orchestrates the diff engine that produces annotated diffs.
+//
+// Thales Matheus Mendonça Santos - November 2025
+//
+// CLI entrypoint that validates input/output folders and delegates to the diff engine.
 use anyhow::{bail, Context, Result};
 use clap::Parser;
 use std::fs;
@@ -7,8 +16,10 @@ use bigdiff::diff::run_bigdiff;
 use bigdiff::scanner::scan_dir;
 
 fn main() -> Result<()> {
+    // Parse CLI arguments defined in `cli.rs`.
     let args = Args::parse();
 
+    // Resolve absolute, canonical paths so comparisons are stable.
     let a_root = args.base_dir.canonicalize().context("Invalid base_dir")?;
     let b_root = args
         .target_dir
@@ -16,6 +27,7 @@ fn main() -> Result<()> {
         .context("Invalid target_dir")?;
     let out_root = args.output_dir.clone();
 
+    // Prevent self-comparison or writing results inside either input tree.
     if a_root == b_root {
         bail!("base_dir and target_dir cannot be the same directory.");
     }
@@ -29,11 +41,14 @@ fn main() -> Result<()> {
             bail!("output_dir cannot be inside base_dir/target_dir nor be equal to them.");
         }
     } else {
+        // Ensure the output directory exists before writing any files.
         fs::create_dir_all(&out_root)?;
     }
 
+    // Parse per-run options (ignore globs, normalization flags, etc.).
     let opts = build_options(&args)?;
 
+    // Dry-run prints a summary without writing anything to disk.
     if opts.dry_run {
         println!("== DRY RUN (Rust Simulation) ==");
         let scan_a = scan_dir(&a_root, &opts.ignore_patterns);
@@ -61,8 +76,10 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    // Execute the main comparison workflow and collect counters.
     let counters = run_bigdiff(&a_root, &b_root, &out_root, &opts)?;
 
+    // Provide a short, human-readable recap of what happened.
     println!("== BigDiff (Rust): Summary ==");
     println!("Equal (omitted):      {}", counters.same);
     println!("New (.new):           {}", counters.new_files);

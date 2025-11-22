@@ -1,6 +1,16 @@
+//
+// comment.rs
+// BigDiff-rs
+//
+// Chooses comment syntaxes per file extension and emits labeled lines so textual diffs remain readable after annotation.
+//
+// Thales Matheus Mendonça Santos - November 2025
+//
+// Helpers that add deletion/new annotations tailored to the file's comment syntax.
 use std::path::Path;
 
 #[derive(Debug)]
+/// Represents how a given language denotes comments.
 pub enum CommentStyle {
     LinePrefix {
         prefix: String,
@@ -14,6 +24,7 @@ pub enum CommentStyle {
 }
 
 impl CommentStyle {
+    /// Marks a line as deleted using the appropriate comment decoration.
     pub fn deleted_line(&self, line: &str) -> String {
         let (content, end) = split_newline(line);
         match self {
@@ -26,6 +37,7 @@ impl CommentStyle {
         }
     }
 
+    /// Marks a line as newly added (appending or wrapping with comment tokens).
     pub fn append_new_suffix(&self, line: &str) -> String {
         let (content, end) = split_newline(line);
         match self {
@@ -37,6 +49,7 @@ impl CommentStyle {
     }
 }
 
+// Preserve existing trailing newline so diff output stays structurally correct.
 fn split_newline(s: &str) -> (&str, &str) {
     if let Some(stripped) = s.strip_suffix('\n') {
         (stripped, "\n")
@@ -129,6 +142,7 @@ pub fn comment_style_for(path: &Path) -> CommentStyle {
         };
     }
 
+    // Default to hash comments for unknown extensions (safe for plain text).
     CommentStyle::LinePrefix {
         prefix: "# ".into(),
         new_suffix: " # NEW".into(),

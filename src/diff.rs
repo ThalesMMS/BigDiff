@@ -1,3 +1,12 @@
+//
+// diff.rs
+// BigDiff-rs
+//
+// Core diff engine: classifies additions, deletions, and modifications between two trees, then writes annotated outputs for review.
+//
+// Thales Matheus Mendonça Santos - November 2025
+//
+// Core diff logic: detects changes between two trees and writes annotated outputs.
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -15,6 +24,7 @@ use crate::utils::{
 };
 
 #[derive(Default, Debug)]
+/// Counters used for the final summary printed to the user.
 pub struct Counters {
     pub same: usize,
     pub new_files: usize,
@@ -24,6 +34,7 @@ pub struct Counters {
     pub del_dirs: usize,
 }
 
+/// Generates a unified text output where deleted lines are commented and new lines are marked.
 pub fn annotate_text_diff(
     a_path: &Path,
     b_path: &Path,
@@ -46,6 +57,7 @@ pub fn annotate_text_diff(
     Ok(output)
 }
 
+/// Copies a deleted directory subtree to the output folder, suffixing names with `.deleted`.
 fn copy_deleted_tree(
     head_rel: &Path,
     scan_a: &ScanResult,
@@ -85,6 +97,7 @@ fn copy_deleted_tree(
                 let _ = fs::create_dir_all(parent);
             }
 
+            // Avoid overwriting existing outputs when two files map to the same destination.
             let dest_file = avoid_collision(&dest_file);
             let _ = fs::copy(path, &dest_file);
             counters.del_files += 1;
@@ -94,17 +107,20 @@ fn copy_deleted_tree(
     processed
 }
 
+/// Main orchestration: walks both trees, classifies changes, and writes annotated copies.
 pub fn run_bigdiff(
     a_root: &Path,
     b_root: &Path,
     out_root: &Path,
     opts: &Options,
 ) -> Result<Counters> {
+    // Snapshot both directory trees first to make the subsequent logic deterministic.
     let scan_a = scan_dir(a_root, &opts.ignore_patterns);
     let scan_b = scan_dir(b_root, &opts.ignore_patterns);
 
     let mut counters = Counters::default();
 
+    // Identify directories present only in A, keeping just the highest-level heads.
     let del_dirs_all: Vec<_> = scan_a
         .dirs
         .iter()
@@ -124,12 +140,14 @@ pub fn run_bigdiff(
         }
     }
 
+    // Copy deleted directory trees first so nested files are already accounted for.
     let mut processed_deleted_files = HashSet::new();
     for head in head_del_dirs {
         let processed = copy_deleted_tree(head, &scan_a, out_root, &mut counters);
         processed_deleted_files.extend(processed);
     }
 
+    // Copy deleted standalone files that were not covered by a deleted directory.
     for (rel_a, abs_a) in &scan_a.files {
         if processed_deleted_files.contains(rel_a) {
             continue;
@@ -150,6 +168,7 @@ pub fn run_bigdiff(
         }
     }
 
+    // Copy brand new files from B, tagging them with `.new`.
     for (rel_b, abs_b) in &scan_b.files {
         if !scan_a.files.contains_key(rel_b) {
             let mut dst = out_root.join(rel_b);
@@ -173,6 +192,7 @@ pub fn run_bigdiff(
         .filter(|k| scan_b.files.contains_key(*k))
         .collect();
 
+    // For files that exist in both trees, decide whether to annotate a text diff or copy as binary.
     for rel in common_files {
         let a_file = &scan_a.files[rel];
         let b_file = &scan_b.files[rel];
@@ -182,6 +202,7 @@ pub fn run_bigdiff(
             continue;
         }
 
+        // Choose comment syntax based on file extension and prepare output path.
         let style = comment_style_for(rel);
         let mut dst = out_root.join(rel);
         if let Some(name) = dst.file_name() {
@@ -207,6 +228,7 @@ pub fn run_bigdiff(
                 new_name.push(".NOTE.txt");
                 note_path.set_file_name(new_name);
             }
+            // Leave a small hint for the user explaining why we skipped a line diff.
             let note_content = format!(
                 "File treated as binary or too large for line diff.\n\
 Base origin (A): {:?}\n\

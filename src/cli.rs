@@ -1,3 +1,12 @@
+//
+// cli.rs
+// BigDiff-rs
+//
+// Parses CLI arguments, validates user input, and translates them into strongly typed options for the diff engine.
+//
+// Thales Matheus Mendonça Santos - November 2025
+//
+// Command-line argument parsing and option normalization.
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -36,6 +45,7 @@ pub struct Args {
 }
 
 #[derive(Debug)]
+/// Options ready for the core engine (already parsed/validated).
 pub struct Options {
     pub normalize_eol: bool,
     pub max_text_size: u64,
@@ -44,12 +54,14 @@ pub struct Options {
 }
 
 pub fn build_options(args: &Args) -> Result<Options> {
+    // Compile glob patterns early so we can fail fast on invalid input.
     let patterns = args
         .ignore
         .iter()
         .map(|s| Pattern::new(s).with_context(|| format!("Invalid glob pattern: {s}")))
         .collect::<Result<Vec<_>>>()?;
 
+    // Translate raw CLI values into strongly typed options for the rest of the app.
     Ok(Options {
         normalize_eol: args.normalize_eol,
         max_text_size: parse_size(&args.max_text_size),
