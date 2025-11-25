@@ -1,2 +1,9 @@
+# Normalize text files to LF across the whole project
 * text=auto eol=lf
+
+# Language-aware overrides
 *.rs text eol=lf
+*.py text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
