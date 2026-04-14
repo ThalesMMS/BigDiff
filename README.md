@@ -75,6 +75,29 @@ Options (CLI strings are in Portuguese):
 - `name.ext.modified` for files that differ, with inline annotations.
 - `name.ext.modified.NOTE.txt` explains when text diff was skipped.
 
+## Support and FAQ
+
+For support:
+
+- Create a **Question / support** issue for usage help or unclear docs.
+- File a **Bug report** issue for reproducible defects.
+- Submit a **Feature request** issue before larger workflow or UX changes.
+- Do not share private, production, or clinical files in issues. Use synthetic or sanitized examples.
+
+FAQ:
+
+- **Which implementation should I use?** Rust is the better default for speed and a standalone binary. Python is the easier path for quick scripting or local customization.
+- **Why did I get a `.modified.NOTE.txt` file instead of inline annotations?** BigDiff falls back to a note when the file is binary-like or exceeds the configured text diff size limit.
+- **What should I attach to a bug report?** The command you ran, expected vs actual behavior, and a minimal sanitized sample.
+
+## Community health
+
+- Contribution guide: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- Security reporting: [`SECURITY.md`](SECURITY.md)
+- Code of conduct: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
+- Pull requests: use the built-in PR template
+- Issues: use the templates in `.github/ISSUE_TEMPLATE/`
+
 ## License
 
 MIT – see `LICENSE`.
