@@ -14,6 +14,7 @@ use std::fs;
 use bigdiff::cli::{build_options, Args};
 use bigdiff::diff::run_bigdiff;
 use bigdiff::scanner::scan_dir;
+use bigdiff::utils::ensure_output_target_safe;
 
 fn main() -> Result<()> {
     // Parse CLI arguments defined in `cli.rs`.
@@ -40,9 +41,17 @@ fn main() -> Result<()> {
         {
             bail!("output_dir cannot be inside base_dir/target_dir nor be equal to them.");
         }
+        ensure_output_target_safe(&out_root, &out_root)?;
     } else {
-        // Ensure the output directory exists before writing any files.
-        fs::create_dir_all(&out_root)?;
+        ensure_output_target_safe(&out_root, &out_root).with_context(|| {
+            format!(
+                "Invalid output_dir before create_dir_all: {:?}",
+                args.output_dir
+            )
+        })?;
+        // Ensure the output directory exists only after output path safety checks.
+        fs::create_dir_all(&out_root)
+            .with_context(|| format!("Failed to create output_dir: {:?}", args.output_dir))?;
     }
 
     // Parse per-run options (ignore globs, normalization flags, etc.).

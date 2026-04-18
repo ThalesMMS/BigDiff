@@ -17,6 +17,7 @@ from typing import List, Set
 from .comment_styles import CommentStyle, comment_style_for
 from .io_utils import (
     avoid_collision,
+    ensure_output_target_safe,
     ensure_parent_dir,
     file_bytes_equal,
     is_probably_binary,
@@ -89,6 +90,7 @@ def copy_deleted_tree(head_rel: Path, scan_a: ScanResult, out_root: Path, counte
         rel_dir = Path(os.path.relpath(dirpath, scan_a.roots))
         # Destination directory mirrors the source path but with ".deleted" appended to each part.
         out_dir = out_root / rel_parts_with_deleted_suffix(rel_dir)
+        ensure_output_target_safe(out_root, out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         counters.del_dirs += 1 if rel_dir == head_rel else 0  # Count only the subtree root.
 
@@ -98,8 +100,10 @@ def copy_deleted_tree(head_rel: Path, scan_a: ScanResult, out_root: Path, counte
             src_file = scan_a.roots / rel_file
             dst_file = out_root / rel_parts_with_deleted_suffix(rel_file)
             dst_file = dst_file.with_name(dst_file.name + ".deleted")
+            ensure_output_target_safe(out_root, dst_file)
             ensure_parent_dir(dst_file)
             dst_file = avoid_collision(dst_file)
+            ensure_output_target_safe(out_root, dst_file)
             shutil.copy2(src_file, dst_file)
             counters.del_files += 1
             processed_files.add(rel_file)
@@ -131,8 +135,10 @@ def bigdiff(a_root: Path, b_root: Path, out_root: Path, opts: Options) -> Counte
         if rel_a not in scan_b.files:
             dst = out_root / rel_a
             dst = dst.with_name(dst.name + ".deleted")
+            ensure_output_target_safe(out_root, dst)
             ensure_parent_dir(dst)
             dst = avoid_collision(dst)
+            ensure_output_target_safe(out_root, dst)
             shutil.copy2(abs_a, dst)
             counters.del_files += 1
 
@@ -141,8 +147,10 @@ def bigdiff(a_root: Path, b_root: Path, out_root: Path, opts: Options) -> Counte
         if rel_b not in scan_a.files:
             dst = out_root / rel_b
             dst = dst.with_name(dst.name + ".new")
+            ensure_output_target_safe(out_root, dst)
             ensure_parent_dir(dst)
             dst = avoid_collision(dst)
+            ensure_output_target_safe(out_root, dst)
             shutil.copy2(abs_b, dst)
             counters.new_files += 1
 
@@ -165,8 +173,10 @@ def bigdiff(a_root: Path, b_root: Path, out_root: Path, opts: Options) -> Counte
         style = comment_style_for(rel)
         dst = out_root / rel
         dst = dst.with_name(dst.name + ".modified")
+        ensure_output_target_safe(out_root, dst)
         ensure_parent_dir(dst)
         dst = avoid_collision(dst)
+        ensure_output_target_safe(out_root, dst)
 
         # Binary or very large files are copied as-is instead of line-diffed to keep output manageable.
         size_b = b_file.stat().st_size
@@ -183,6 +193,7 @@ def bigdiff(a_root: Path, b_root: Path, out_root: Path, opts: Options) -> Counte
                 f"Tamanho: {size_b} bytes\n"
                 f"Estrategia: cópia direta do alvo para '.modified'.\n"
             )
+            ensure_output_target_safe(out_root, note)
             note.write_text(note_content, encoding="utf-8")
         else:
             annotated = annotate_text_diff(a_file, b_file, style, opts.normalize_eol)

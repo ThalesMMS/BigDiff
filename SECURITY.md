@@ -16,7 +16,7 @@ Because this repository is private, contributors are expected to use a private c
 - whether sensitive files or data are involved
 - any suggested mitigation
 
-Private reporting endpoint: use GitHub Security Advisories at https://github.com/ThalesMMS/BigDiff/security/advisories/new for a non-public report.
+Private reporting endpoint: use GitHub Security Advisories at https://github.com/ThalesMMS/BigDiff-dev/security/advisories/new for a non-public report.
 
 If you do not already have a private contact path, open a minimal issue that says you need a private security handoff, without including exploit details.
 

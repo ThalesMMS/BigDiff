@@ -16,18 +16,23 @@ def parse_size(s: str) -> int:
     Convert strings like "5MB", "200k", or "10MiB" into byte counts.
     """
     s = s.strip().lower()
-    # Accept both decimal (MB) and binary (MiB) units; fall back to raw bytes when no unit is present.
-    units = {
-        "b": 1,
-        "kb": 1000, "k": 1000,
-        "mb": 1000**2, "m": 1000**2,
-        "gb": 1000**3, "g": 1000**3,
-        "kib": 1024, "mib": 1024**2, "gib": 1024**3,
-    }
-    for u, mult in units.items():
-        if s.endswith(u):
-            val = float(s[: -len(u)])
-            return int(val * mult)
+    # Match longer suffixes first so "mb" does not get swallowed by the plain "b" branch.
+    units = [
+        ("gib", 1024**3),
+        ("mib", 1024**2),
+        ("kib", 1024),
+        ("gb", 1000**3),
+        ("mb", 1000**2),
+        ("kb", 1000),
+        ("g", 1000**3),
+        ("m", 1000**2),
+        ("k", 1000),
+        ("b", 1),
+    ]
+    for unit, multiplier in units:
+        if s.endswith(unit):
+            val = float(s[: -len(unit)])
+            return int(val * multiplier)
     # No unit provided: interpret as raw bytes.
     return int(s)
 
@@ -82,6 +87,27 @@ def file_bytes_equal(p1: Path, p2: Path) -> bool:
 
 def ensure_parent_dir(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def ensure_output_target_safe(out_root: Path, target: Path) -> None:
+    """
+    Refuse writes when any existing output path component is a symlink.
+
+    ensure_output_target_safe checks out_root and its ancestors before deriving
+    rel from target, then walks from out_root through rel to validate children.
+    """
+    for component in (out_root, *out_root.parents):
+        if component.is_symlink():
+            if component == out_root:
+                raise ValueError(f"Refusing to write into symlinked output root: {out_root}")
+            raise ValueError(f"Refusing to write through symlinked output path component: {component}")
+
+    rel = target.relative_to(out_root)
+    current = out_root
+    for part in rel.parts:
+        current = current / part
+        if current.is_symlink():
+            raise ValueError(f"Refusing to write through symlinked output path component: {current}")
 
 
 def avoid_collision(path: Path) -> Path:

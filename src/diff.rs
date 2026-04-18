@@ -19,8 +19,8 @@ use crate::cli::Options;
 use crate::comment::{comment_style_for, CommentStyle};
 use crate::scanner::{scan_dir, ScanResult};
 use crate::utils::{
-    avoid_collision, file_bytes_equal, is_probably_binary, read_text_best_effort,
-    rel_parts_with_deleted_suffix,
+    avoid_collision, ensure_output_target_safe, file_bytes_equal, is_probably_binary,
+    read_text_best_effort, rel_parts_with_deleted_suffix,
 };
 
 #[derive(Default, Debug)]
@@ -63,7 +63,7 @@ fn copy_deleted_tree(
     scan_a: &ScanResult,
     out_root: &Path,
     counters: &mut Counters,
-) -> HashSet<PathBuf> {
+) -> Result<HashSet<PathBuf>> {
     let mut processed = HashSet::new();
     let head_abs = scan_a.root.join(head_rel);
 
@@ -81,7 +81,8 @@ fn copy_deleted_tree(
         let dest_path = out_root.join(rel_parts_with_deleted_suffix(rel_from_root));
 
         if entry.file_type().is_dir() {
-            let _ = fs::create_dir_all(&dest_path);
+            ensure_output_target_safe(out_root, &dest_path)?;
+            fs::create_dir_all(&dest_path)?;
             if rel_from_root == head_rel {
                 counters.del_dirs += 1;
             }
@@ -94,17 +95,19 @@ fn copy_deleted_tree(
             }
 
             if let Some(parent) = dest_file.parent() {
-                let _ = fs::create_dir_all(parent);
+                ensure_output_target_safe(out_root, parent)?;
+                fs::create_dir_all(parent)?;
             }
 
             // Avoid overwriting existing outputs when two files map to the same destination.
             let dest_file = avoid_collision(&dest_file);
-            let _ = fs::copy(path, &dest_file);
+            ensure_output_target_safe(out_root, &dest_file)?;
+            fs::copy(path, &dest_file)?;
             counters.del_files += 1;
             processed.insert(rel_from_root.to_path_buf());
         }
     }
-    processed
+    Ok(processed)
 }
 
 /// Main orchestration: walks both trees, classifies changes, and writes annotated copies.
@@ -143,7 +146,7 @@ pub fn run_bigdiff(
     // Copy deleted directory trees first so nested files are already accounted for.
     let mut processed_deleted_files = HashSet::new();
     for head in head_del_dirs {
-        let processed = copy_deleted_tree(head, &scan_a, out_root, &mut counters);
+        let processed = copy_deleted_tree(head, &scan_a, out_root, &mut counters)?;
         processed_deleted_files.extend(processed);
     }
 
@@ -160,9 +163,11 @@ pub fn run_bigdiff(
                 dst.set_file_name(new_name);
             }
             if let Some(p) = dst.parent() {
+                ensure_output_target_safe(out_root, p)?;
                 fs::create_dir_all(p)?;
             }
             dst = avoid_collision(&dst);
+            ensure_output_target_safe(out_root, &dst)?;
             fs::copy(abs_a, dst)?;
             counters.del_files += 1;
         }
@@ -178,9 +183,11 @@ pub fn run_bigdiff(
                 dst.set_file_name(new_name);
             }
             if let Some(p) = dst.parent() {
+                ensure_output_target_safe(out_root, p)?;
                 fs::create_dir_all(p)?;
             }
             dst = avoid_collision(&dst);
+            ensure_output_target_safe(out_root, &dst)?;
             fs::copy(abs_b, dst)?;
             counters.new_files += 1;
         }
@@ -211,9 +218,11 @@ pub fn run_bigdiff(
             dst.set_file_name(new_name);
         }
         if let Some(p) = dst.parent() {
+            ensure_output_target_safe(out_root, p)?;
             fs::create_dir_all(p)?;
         }
         dst = avoid_collision(&dst);
+        ensure_output_target_safe(out_root, &dst)?;
 
         let size_b = fs::metadata(b_file)?.len();
         let is_bin = is_probably_binary(b_file);
@@ -237,6 +246,7 @@ Size: {} bytes\n\
 Strategy: direct copy from target to '.modified'.\n",
                 a_file, b_file, size_b
             );
+            ensure_output_target_safe(out_root, &note_path)?;
             fs::write(note_path, note_content)?;
         } else {
             let annotated = annotate_text_diff(a_file, b_file, &style, opts.normalize_eol)?;

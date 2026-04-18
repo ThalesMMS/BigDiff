@@ -11,7 +11,7 @@ use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
 use encoding_rs::WINDOWS_1252;
 use sha2::{Digest, Sha256};
 
@@ -118,6 +118,57 @@ pub fn avoid_collision(path: &Path) -> PathBuf {
         }
         n += 1;
     }
+}
+
+/// Refuses writes when any existing output path component is a symlink.
+pub fn ensure_output_target_safe(out_root: &Path, target: &Path) -> Result<()> {
+    let mut ancestors: Vec<_> = out_root.ancestors().collect();
+    ancestors.reverse();
+
+    for ancestor in ancestors {
+        if ancestor.as_os_str().is_empty() {
+            continue;
+        }
+        match fs::symlink_metadata(ancestor) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                if ancestor == out_root {
+                    bail!(
+                        "Refusing to write into symlinked output root: {:?}",
+                        out_root
+                    );
+                }
+                bail!(
+                    "Refusing to write through symlinked output path component: {:?}",
+                    ancestor
+                );
+            }
+            Ok(_) => {}
+            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+            Err(err) => return Err(err.into()),
+        }
+    }
+
+    let rel = target
+        .strip_prefix(out_root)
+        .with_context(|| format!("Output target escapes output root: {target:?}"))?;
+
+    let mut current = out_root.to_path_buf();
+    for comp in rel.components() {
+        current.push(comp);
+        match fs::symlink_metadata(&current) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                bail!(
+                    "Refusing to write through symlinked output path component: {:?}",
+                    current
+                );
+            }
+            Ok(_) => {}
+            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+            Err(err) => return Err(err.into()),
+        }
+    }
+
+    Ok(())
 }
 
 /// Adds `.deleted` after every path component to mirror removed folder hierarchies.

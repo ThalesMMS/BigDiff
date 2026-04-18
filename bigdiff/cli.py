@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from .core import Options, bigdiff, is_parent
-from .io_utils import parse_size, rel_parts_with_deleted_suffix
+from .io_utils import ensure_output_target_safe, parse_size, rel_parts_with_deleted_suffix
 from .scanner import scan_dir
 
 
@@ -36,26 +36,45 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
 
-    # Resolve early so the rest of the code deals only with absolute paths.
-    a_root: Path = args.pasta1.resolve()
-    b_root: Path = args.pasta2.resolve()
-    out_root: Path = args.pasta3.resolve()
+    # Keep raw output path components visible until symlink and overlap checks finish.
+    raw_a: Path = args.pasta1
+    raw_b: Path = args.pasta2
+    raw_out: Path = args.pasta3
 
-    if not a_root.exists() or not a_root.is_dir():
-        print(f"[ERRO] pasta1 inválida: {a_root}", file=sys.stderr)
+    if not raw_a.exists() or not raw_a.is_dir():
+        print(f"[ERRO] pasta1 inválida: {raw_a}", file=sys.stderr)
         return 2
-    if not b_root.exists() or not b_root.is_dir():
-        print(f"[ERRO] pasta2 inválida: {b_root}", file=sys.stderr)
+    if not raw_b.exists() or not raw_b.is_dir():
+        print(f"[ERRO] pasta2 inválida: {raw_b}", file=sys.stderr)
         return 2
+    if raw_a == raw_b:
+        print("[ERRO] pasta1 e pasta2 não podem ser o mesmo diretório.", file=sys.stderr)
+        return 2
+
+    try:
+        ensure_output_target_safe(raw_out, raw_out)
+    except ValueError as exc:
+        print(f"[ERRO] {exc}", file=sys.stderr)
+        return 2
+
+    if raw_out == raw_a or raw_out == raw_b or is_parent(raw_a, raw_out) or is_parent(raw_b, raw_out):
+        print("[ERRO] pasta3 não pode ser dentro de pasta1/pasta2, nem igual a elas.", file=sys.stderr)
+        return 2
+
+    # Canonicalize only after validating the raw path spelling so symlink components are not hidden.
+    a_root = raw_a.resolve()
+    b_root = raw_b.resolve()
+    out_root = raw_out.resolve()
+
     if a_root == b_root:
         print("[ERRO] pasta1 e pasta2 não podem ser o mesmo diretório.", file=sys.stderr)
         return 2
-    if out_root.exists():
-        # Allow reusing the output directory, but forbid overlap with inputs to avoid clobbering.
-        if out_root == a_root or out_root == b_root or is_parent(a_root, out_root) or is_parent(b_root, out_root):
-            print("[ERRO] pasta3 não pode ser dentro de pasta1/pasta2, nem igual a elas.", file=sys.stderr)
-            return 2
-    else:
+    # Allow reusing the output directory, but forbid overlap with inputs to avoid clobbering.
+    if out_root == a_root or out_root == b_root or is_parent(a_root, out_root) or is_parent(b_root, out_root):
+        print("[ERRO] pasta3 não pode ser dentro de pasta1/pasta2, nem igual a elas.", file=sys.stderr)
+        return 2
+
+    if not out_root.exists():
         out_root.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -101,7 +120,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         # Skip content comparison during dry-run to keep the preview fast.
         return 0
 
-    counters = bigdiff(a_root, b_root, out_root, opts)
+    try:
+        counters = bigdiff(a_root, b_root, out_root, opts)
+    except ValueError as exc:
+        print(f"[ERRO] {exc}", file=sys.stderr)
+        return 2
 
     print("== BigDiff: resumo ==")
     print(f"Iguais (omitidos):    {counters.same}")
